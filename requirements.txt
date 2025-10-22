@@ -8,3 +8,5 @@ opencv-python==4.8.1.78
 deepface==0.0.79
 numpy==1.24.4
 tensorflow==2.10.1 # O tensorflow-cpu si no tienes GPU
+mediapipe>=0.10.0
+pillow>=9.0.0

@@ -9,6 +9,12 @@ import sys
 import locale
 from PIL import Image, ImageDraw, ImageFont  # Importación necesaria para texto
 
+# MediaPipe para detección y segmentación
+try:
+    import mediapipe as mp
+except Exception:
+    mp = None
+
 # Configuración regional para caracteres especiales (UTF-8)
 try:
     locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
@@ -156,20 +162,67 @@ class FraseManager:
 def procesar_frame(frame):
     """Detecta emociones en un frame y devuelve la predominante"""
     try:
-        # Usamos DeepFace para analizar las emociones
+        # Usamos DeepFace para analizar las emociones sobre el recorte
         resultado = DeepFace.analyze(
-            frame, 
-            actions=['emotion'], 
-            enforce_detection=False, 
+            frame,
+            actions=['emotion'],
+            enforce_detection=False,
             silent=True
         )
-        
-        if resultado and isinstance(resultado, list):
-            emocion_ingles = resultado[0]['dominant_emotion'].lower()
+
+        # DeepFace puede devolver diccionario o lista dependiendo de la versión
+        if resultado:
+            if isinstance(resultado, list):
+                res = resultado[0]
+            else:
+                res = resultado
+
+            emocion_ingles = res.get('dominant_emotion', '').lower()
             return TRADUCCION_EMOCIONES.get(emocion_ingles, "default")
     except Exception as e:
         print(f"Error en detección: {str(e)}")
     return "default"
+
+
+def detectar_caras_mediapipe(frame_rgb, mp_face_detection, min_detection_confidence=0.5):
+    """Detecta caras usando MediaPipe Face Detection. Retorna lista de bboxes en pixeles (x, y, w, h)."""
+    if mp is None or mp_face_detection is None:
+        return []
+
+    results = mp_face_detection.process(frame_rgb)
+    h, w, _ = frame_rgb.shape
+    bboxes = []
+    if results.detections:
+        for det in results.detections:
+            bboxC = det.location_data.relative_bounding_box
+            x = int(bboxC.xmin * w)
+            y = int(bboxC.ymin * h)
+            bw = int(bboxC.width * w)
+            bh = int(bboxC.height * h)
+            # Aumentar el bbox ligeramente para incluir mentón y frente
+            pad_x = int(0.1 * bw)
+            pad_y = int(0.2 * bh)
+            x1 = max(0, x - pad_x)
+            y1 = max(0, y - pad_y)
+            x2 = min(w, x + bw + pad_x)
+            y2 = min(h, y + bh + pad_y)
+            bboxes.append((x1, y1, x2 - x1, y2 - y1))
+    return bboxes
+
+
+def smooth_bbox(bbox_deque, new_bbox, maxlen=5):
+    """Agrega new_bbox a la deque y devuelve bbox suavizado por promedio aritmético."""
+    bbox_deque.append(new_bbox)
+    xs = [b[0] for b in bbox_deque]
+    ys = [b[1] for b in bbox_deque]
+    ws = [b[2] for b in bbox_deque]
+    hs = [b[3] for b in bbox_deque]
+    return (
+        int(sum(xs) / len(xs)),
+        int(sum(ys) / len(ys)),
+        int(sum(ws) / len(ws)),
+        int(sum(hs) / len(hs)),
+    )
 
 def dibujar_interfaz(fondo, frame_pequeno, texto, tiempo_transcurrido, emocion):
     """Dibuja todos los elementos de la interfaz en el fondo"""
@@ -258,8 +311,25 @@ def main():
     emocion_actual = "default"
     ultimo_cambio = time.time()
     frame_count = 0
-    FRAME_SKIP = 5  # Procesar 1 de cada 5 frames para mejor rendimiento
+    FRAME_SKIP = 4  # Procesar 1 de cada 4 frames para mejor rendimiento
     frase_manager = FraseManager()
+
+    # MediaPipe: detección y segmentación (opcional)
+    use_segmentation = True if mp is not None else False
+    mp_face_detection = None
+    mp_selfie_segmentation = None
+    if mp is not None:
+        mp_face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.5)
+        if use_segmentation:
+            mp_selfie_segmentation = mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=1)
+
+    # Tracker para bbox estable (CSRT funciona bien para caras)
+    tracker = None
+    tracker_initialized = False
+    bbox_history = deque(maxlen=6)
+    emotion_from_face = "default"
+    analyze_every_n_frames = 8
+    last_analyze_frame = 0
     
     while True:
         ret, frame = cap.read()
@@ -270,30 +340,114 @@ def main():
         frame_count += 1
         
         # Procesar solo algunos frames para mejorar rendimiento
-        if frame_count % FRAME_SKIP == 0:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            nueva_emocion = procesar_frame(frame_rgb)
-            
-            if nueva_emocion and nueva_emocion != emocion_actual:
-                emocion_actual = nueva_emocion
-                ultimo_cambio = time.time()
-                print(f"Emoción detectada: {emocion_actual}")
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        # Aplicar segmentación para desenfocar el fondo (opcional y visual)
+        if use_segmentation and mp_selfie_segmentation is not None:
+            seg_results = mp_selfie_segmentation.process(frame_rgb)
+            if seg_results and seg_results.segmentation_mask is not None:
+                mask = seg_results.segmentation_mask > 0.1
+                bg = cv2.GaussianBlur(frame, (55, 55), 0)
+                frame = np.where(mask[:, :, None], frame, bg)
+
+        # Actualizar tracker si ya está inicializado
+        face_bbox = None
+        if tracker_initialized and tracker is not None:
+            ok, tracked_bbox = tracker.update(frame)
+            if ok:
+                tracked_bbox = tuple(map(int, tracked_bbox))
+                face_bbox = tracked_bbox  # x,y,w,h
+                smoothed = smooth_bbox(bbox_history, face_bbox)
+                face_bbox = smoothed
+            else:
+                # Tracker perdió al sujeto
+                tracker = None
+                tracker_initialized = False
+
+        # Si no hay tracker activo, intentar detectar con MediaPipe cada FRAME_SKIP frames
+        if not tracker_initialized and frame_count % FRAME_SKIP == 0 and mp_face_detection is not None:
+            bboxes = detectar_caras_mediapipe(frame_rgb, mp_face_detection)
+            if bboxes:
+                # Seleccionar la cara más grande
+                bboxes = sorted(bboxes, key=lambda b: b[2] * b[3], reverse=True)
+                x, y, w, h = bboxes[0]
+                face_bbox = (x, y, w, h)
+                # Inicializar tracker con bbox detectado
+                try:
+                    tracker = cv2.TrackerCSRT_create()
+                except Exception:
+                    tracker = cv2.legacy.TrackerCSRT_create()
+                tracker.init(frame, face_bbox)
+                tracker_initialized = True
+                bbox_history.clear()
+                bbox_history.append(face_bbox)
+
+        # Si ya tenemos bbox (track o detect), analizar emoción sobre el recorte cada N frames
+        if face_bbox is not None:
+            x, y, w, h = face_bbox
+            # Asegurar límites
+            h_img, w_img = frame.shape[:2]
+            x1 = max(0, x)
+            y1 = max(0, y)
+            x2 = min(w_img, x + w)
+            y2 = min(h_img, y + h)
+            face_crop = frame[y1:y2, x1:x2]
+
+            if face_crop.size != 0 and (frame_count - last_analyze_frame) >= analyze_every_n_frames:
+                last_analyze_frame = frame_count
+                try:
+                    # DeepFace espera RGB o BGR dependiendo de versión; usar BGR funciona generalmente
+                    nueva_emocion = procesar_frame(face_crop)
+                    if nueva_emocion and nueva_emocion != emotion_from_face:
+                        emotion_from_face = nueva_emocion
+                        emocion_actual = emotion_from_face
+                        ultimo_cambio = time.time()
+                        print(f"Emoción detectada (face): {emocion_actual}")
+                except Exception as e:
+                    print(f"Error analizando cara: {e}")
+
+        # Si no hay face_bbox y no hay tracker, ocasionalmente intentar detectar globalmente cada 30 frames
+        if face_bbox is None and frame_count % 30 == 0:
+            # Fallback: usar DeepFace sobre frame reducido (menos preciso pero evita quedarse en 'default')
+            try:
+                small = cv2.resize(frame, (320, 240))
+                fallback_emocion = procesar_frame(small)
+                if fallback_emocion and fallback_emocion != emocion_actual:
+                    emocion_actual = fallback_emocion
+                    ultimo_cambio = time.time()
+                    print(f"Emoción detectada (fallback): {emocion_actual}")
+            except Exception:
+                pass
         
         # Calcular tiempo transcurrido desde el último cambio
         tiempo_transcurrido = int(time.time() - ultimo_cambio)
         
         # Crear fondo con el color de la emoción actual
         fondo = np.full((600, 800, 3), COLORES.get(emocion_actual, COLORES["default"]), dtype=np.uint8)
-        
+
         # Redimensionar frame de la cámara
         frame_pequeno = cv2.resize(frame, (640, 480))
-        
+
+        # Dibujar bounding box estable en el frame pequeño si existe
+        texto_superior = frase_manager.obtener_frase(emocion_actual)
+        if face_bbox is not None:
+            # Ajustar coords al frame_pequeno si se desea superponer (frame original -> frame_pequeno escala)
+            scale_x = 640 / frame.shape[1]
+            scale_y = 480 / frame.shape[0]
+            bx = int(face_bbox[0] * scale_x)
+            by = int(face_bbox[1] * scale_y)
+            bw = int(face_bbox[2] * scale_x)
+            bh = int(face_bbox[3] * scale_y)
+            cv2.rectangle(frame_pequeno, (bx, by), (bx + bw, by + bh), (255, 255, 255), 2)
+            label = f"{emocion_actual.capitalize()}"
+            cv2.putText(frame_pequeno, label, (bx, max(15, by - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
         # Obtener frase adecuada (cambia periódicamente)
-        texto = frase_manager.obtener_frase(emocion_actual)
-        
+        texto = texto_superior
+
         # Dibujar toda la interfaz
         fondo = dibujar_interfaz(fondo, frame_pequeno, texto, tiempo_transcurrido, emocion_actual)
-        
+
         # Mostrar el resultado
         cv2.imshow(window_title, fondo)
         
