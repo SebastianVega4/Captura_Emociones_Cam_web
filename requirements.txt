@@ -3,10 +3,11 @@
 # python --version
 # pip uninstall -y numpy opencv-python tensorflow deepface
 # pip install -r requirements.txt
+# Activa tu entorno virtual actual
 
 opencv-python==4.8.1.78
+numpy==1.24.3
+tensorflow==2.13.0
 deepface==0.0.79
-numpy==1.24.4
-tensorflow==2.10.1 # O tensorflow-cpu si no tienes GPU
-mediapipe>=0.10.0
-pillow>=9.0.0
+mediapipe==0.10.0
+pillow==9.5.0
