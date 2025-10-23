@@ -18,25 +18,25 @@ La aplicación está optimizada para el rendimiento al procesar solo un subconju
 
 ## ✨ Características Destacadas
 
-* **Detección de Emociones en Tiempo Real**: Utiliza DeepFace para identificar la emoción predominante (feliz, triste, enojado, sorprendido, neutral, miedo, disgusto) a partir del rostro del usuario.
-* **Interfaz Visual Adaptativa**: El color de fondo de la ventana cambia dinámicamente para reflejar la emoción detectada, creando una experiencia visual inmersiva.
-* **Mensajes Personalizados por Emoción**: Muestra frases relevantes y motivacionales en español que se actualizan periódicamente, ofreciendo un soporte o reflexión acorde a la emoción actual.
-* **Optimización de Rendimiento**: Procesamiento de frames cada cierto intervalo (`FRAME_SKIP`) para reducir la carga de la CPU y GPU, garantizando una detección fluida.
-* **Gestión Inteligente de Frases**: Un gestor de frases (`FraseManager`) asegura que las frases no se repitan consecutivamente para la misma emoción hasta que se hayan mostrado todas las opciones disponibles.
-* **Soporte Multilenguaje (Español)**: Las emociones detectadas y las frases se muestran en español con tildes y caracteres especiales correctos.
-* **Fácil de Usar**: Interfaz simple para iniciar la detección con solo ejecutar el script.
+- **Detección de Emociones en Tiempo Real**: Utiliza DeepFace para identificar la emoción predominante (feliz, triste, enojado, sorprendido, neutral, miedo, disgusto) a partir del rostro del usuario.
+- **Interfaz Visual Adaptativa**: El color de fondo de la ventana cambia dinámicamente para reflejar la emoción detectada, creando una experiencia visual inmersiva.
+- **Mensajes Personalizados por Emoción**: Muestra frases relevantes y motivacionales en español que se actualizan periódicamente, ofreciendo un soporte o reflexión acorde a la emoción actual.
+- **Optimización de Rendimiento**: Procesamiento de frames cada cierto intervalo (`FRAME_SKIP`) para reducir la carga de la CPU y GPU, garantizando una detección fluida.
+- **Gestión Inteligente de Frases**: Un gestor de frases (`FraseManager`) asegura que las frases no se repitan consecutivamente para la misma emoción hasta que se hayan mostrado todas las opciones disponibles.
+- **Soporte Multilenguaje (Español)**: Las emociones detectadas y las frases se muestran en español con tildes y caracteres especiales correctos.
+- **Fácil de Usar**: Interfaz simple para iniciar la detección con solo ejecutar el script.
 
 ---
 
 ## ⚙️ Tecnologías Utilizadas
 
-* **Lenguaje de Programación**: Python 3.8+
-* **Visión por Computadora**: OpenCV (`cv2`)
-* **Análisis Facial y Emocional**: DeepFace
-* **Manipulación de Imágenes**: `numpy`
-* **Interfaz Gráfica de Usuario (GUI)**: Implementada directamente con OpenCV para la visualización.
-* **Manejo de Texto y Fuentes**: PIL (Pillow: `Image`, `ImageDraw`, `ImageFont`)
-* **Otras Librerías**: `random`, `time`, `collections` (deque), `os`, `sys`, `locale`.
+- **Lenguaje de Programación**: Python 3.8+
+- **Visión por Computadora**: OpenCV (`cv2`)
+- **Análisis Facial y Emocional**: DeepFace
+- **Manipulación de Imágenes**: `numpy`
+- **Interfaz Gráfica de Usuario (GUI)**: Implementada directamente con OpenCV para la visualización.
+- **Manejo de Texto y Fuentes**: PIL (Pillow: `Image`, `ImageDraw`, `ImageFont`)
+- **Otras Librerías**: `random`, `time`, `collections` (deque), `os`, `sys`, `locale`.
 
 ---
 
@@ -49,6 +49,7 @@ Deteccion_Emociones/
 │
 ├── main.py                     # Script principal de la aplicación
 ├── Arial.ttf                   # Fuente (opcional, si se desea una fuente específica)
+├── setup_models.py             # Script para descargar los modelos necesarios
 ├── .gitignore                  # Archivos y carpetas excluidas del control de versiones
 └── README.md                   # Documentación del proyecto
 ```
@@ -61,19 +62,21 @@ Deteccion_Emociones/
 
 ### Requisitos
 
-* **Python 3.8+**
-* **pip** (gestor de paquetes de Python)
-* **Una cámara web funcional**
+- **Python 3.8+**
+- **pip** (gestor de paquetes de Python)
+- **Una cámara web funcional**
 
 ### Pasos para la ejecución
 
 1.  **Clonar el repositorio**:
+
     ```bash
     git clone https://github.com/SebastianVega4/Captura_Emociones_Cam_web
     cd Deteccion_Emociones
     ```
 
 2.  **Crear un entorno virtual (opcional pero recomendado)**:
+
     ```bash
     python -m venv venv
     source venv/bin/activate  # En Linux/macOS
@@ -81,20 +84,23 @@ Deteccion_Emociones/
     ```
 
 3.  **Instalar dependencias**:
+
     ```bash
     pip install opencv-python numpy deepface pillow
     ```
+
     (DeepFace descargará automáticamente sus modelos pre-entrenados la primera vez que se ejecute.)
 
 4.  **Ejecutar la aplicación**:
+
     ```bash
     python main.py
     ```
 
 5.  **Interacción**:
-    * Asegúrate de que tu rostro sea visible para la cámara.
-    * La ventana mostrará tu imagen con el fondo y texto adaptados a tu emoción detectada.
-    * Presiona la tecla `'q'` para salir de la aplicación.
+    - Asegúrate de que tu rostro sea visible para la cámara.
+    - La ventana mostrará tu imagen con el fondo y texto adaptados a tu emoción detectada.
+    - Presiona la tecla `'q'` para salir de la aplicación.
 
 ---
 
@@ -113,10 +119,11 @@ Desarrollado por **Sebastián Vega**
 Este repositorio se encuentra bajo la Licencia **GPL 3.0**.
 
 **Permisos:**
-* Uso comercial
-* Modificación
-* Distribución
-* Uso privado
+
+- Uso comercial
+- Modificación
+- Distribución
+- Uso privado
 
 ---
 
